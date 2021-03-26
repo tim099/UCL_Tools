@@ -12,7 +12,8 @@ namespace UCL.ToolsLib
         [UCL.Core.ATTR.UCL_FunctionButton]
         public void OpenWindow()
         {
-            UCL_AssetReplaceWindow.ShowWindow(this);
+            UCL_ToolsEditorFunctionMapper.OpenAssetReplaceWindow(this);
+            //UCL_AssetReplaceWindow.ShowWindow(this);
         }
 #endif
     }
