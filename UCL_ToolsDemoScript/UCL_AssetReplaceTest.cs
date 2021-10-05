@@ -27,13 +27,15 @@ namespace UCL.ToolsLib.Demo
         public Sprite[] m_SpriteArray = null;
         public TestData m_TestData = new TestData();
         public TestData2 m_TestData2 = default;
-        [UCL.Core.ATTR.UCL_DrawOnGUI]
-        public void DrawInspectorGUI()
+
+        [UCL.Core.ATTR.UCL_DrawOnGUI("Test")]
+        [UCL.Core.ATTR.UCL_DrawOnGUI("Hihi")]
+        public void DrawInspectorGUI(string iStr)
         {
             UCL.Core.UI.UCL_GUILayout.DrawSpriteFixedWidth(m_Sprite, 128);
-            if (GUILayout.Button("Test"))
+            if (GUILayout.Button(iStr))
             {
-                Debug.LogWarning("Test!!");
+                Debug.LogWarning(iStr);
             }
         }
 
