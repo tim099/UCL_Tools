@@ -411,6 +411,9 @@ namespace UCL.ToolsLib
             }
             return aIsModified;
         }
+
+
+        [System.Obsolete("Please use UCL_FindMissingReferenceWindow instead!!")]
         virtual public void FindMissingReference() {
             m_MissingReferenceList.Clear();
             int aTotalCount = 0;
