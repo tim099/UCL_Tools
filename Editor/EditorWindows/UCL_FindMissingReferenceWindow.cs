@@ -15,6 +15,10 @@ namespace UCL.Core
         public bool m_ClearMissingPrefab = true;
         public bool m_ClearMissingComponent = true;
         public bool m_ClearMissingField = true;
+        /// <summary>
+        /// Clear missing references in Prefab
+        /// </summary>
+        public bool m_ClearMissingInPrefab = false;
     }
 
 
@@ -45,6 +49,7 @@ namespace UCL.Core
     public class UCL_FindMissingReferenceWindow : EditorWindow
     {
         private Vector2 scrollPosition = Vector2.zero;
+        private Vector2 scrollPosition2 = Vector2.zero;
         private List<MissingReferenceScene> m_MissingAssetSceneList = null;
         private ClearConfig m_ClearConfig = new ClearConfig();
         private UCL_ObjectDictionary m_Dic = new UCL_ObjectDictionary();
@@ -110,8 +115,7 @@ namespace UCL.Core
             {
                 path = $"{path}.{target.name}";
             }
-
-            if (PrefabUtility.IsPrefabAssetMissing(target))
+            if (PrefabUtility.IsPrefabAssetMissing(target))//missing!!
             {
 
                 missingReferences.Add(new MissingReferenceInfo(target, path));
@@ -121,8 +125,28 @@ namespace UCL.Core
 
             if (target == null)//missing!!
             {
+                Debug.LogError($"CheckGameObjectMissingReference target == null, path:{path}");
                 return true;
             }
+
+            if (PrefabUtility.IsAnyPrefabInstanceRoot(target))//是Prefab 要特殊處理
+            {
+                GameObject prefab = PrefabUtility.GetCorrespondingObjectFromSource(target) as GameObject;
+
+                if (prefab != null)
+                {
+                    //Debug.Log($"path: {path}, Prefab:{prefab.name}");
+                    //TODO Prefab內部檢查要特殊處理
+                    //missingReferences.Add(new MissingReferenceInfo(target, $"(Prefab){path}"));
+                    return CheckGameObjectMissingReference(prefab, missingReferences, $"(Prefab){path}");
+                }
+                else
+                {
+                    Debug.LogError($"CheckGameObjectMissingReference prefab == null, path:{path}");
+                }
+                return false;
+            }
+
             var components = target.GetComponents<Component>();
             bool isMissingReference = false;
             foreach (var component in components)
@@ -215,6 +239,30 @@ namespace UCL.Core
                 if (config.m_ClearMissingPrefab) GameObject.DestroyImmediate(target);
                 return;
             }
+            if (PrefabUtility.IsAnyPrefabInstanceRoot(target))//是Prefab 要特殊處理
+            {
+                if (!config.m_ClearMissingInPrefab)//Dont clear missing references in Prefab
+                {
+                    return;
+                }
+                GameObject prefab = PrefabUtility.GetCorrespondingObjectFromSource(target) as GameObject;
+
+                if (prefab != null)
+                {
+                    //Debug.Log($"path: {path}, Prefab:{prefab.name}");
+                    //TODO Prefab內部檢查要特殊處理
+                    //missingReferences.Add(new MissingReferenceInfo(target, $"(Prefab){path}"));
+                    ClearGameObjectMissingReference(prefab, config);
+                    AssetDatabase.SaveAssetIfDirty(prefab);
+                }
+                else
+                {
+                    Debug.LogError($"CheckGameObjectMissingReference prefab == null");
+                }
+                return;
+            }
+
+
             var components = target.GetComponents<Component>();
             bool hasMissingComponents = false;//有missing Component
             bool dirty = false;
@@ -383,36 +431,42 @@ namespace UCL.Core
                     }
                 }
                 UCL_GUILayout.DrawObjectData(m_ClearConfig, m_Dic.GetSubDic(nameof(m_ClearConfig)), "Clear Config");
-
-                for (int i = 0; i < m_MissingAssetSceneList.Count; i++)
+                using (var scope = new GUILayout.ScrollViewScope(scrollPosition2))
                 {
-                    var target = m_MissingAssetSceneList[i];
-                    var scene = target.scene;
-                    GUILayout.BeginHorizontal();
-                    target.showDetail = UCL_GUILayout.Toggle(target.showDetail);
-                    using (new GUILayout.VerticalScope())
+                    scrollPosition2 = scope.scrollPosition;
+
+                    
+
+                    for (int i = 0; i < m_MissingAssetSceneList.Count; i++)
                     {
-                        using (new GUILayout.HorizontalScope())
+                        var target = m_MissingAssetSceneList[i];
+                        var scene = target.scene;
+                        GUILayout.BeginHorizontal();
+                        target.showDetail = UCL_GUILayout.Toggle(target.showDetail);
+                        using (new GUILayout.VerticalScope())
                         {
-                            if (GUILayout.Button($"Clear Missing Reference({target.missingReferences.Count})", UCL_GUIStyle.ButtonStyle, GUILayout.ExpandWidth(false)))//清除目標場景的Missing Reference
+                            using (new GUILayout.HorizontalScope())
                             {
-                                ClearMissingReference(scene, m_ClearConfig);
+                                if (GUILayout.Button($"Clear Missing Reference({target.missingReferences.Count})", UCL_GUIStyle.ButtonStyle, GUILayout.ExpandWidth(false)))//清除目標場景的Missing Reference
+                                {
+                                    ClearMissingReference(scene, m_ClearConfig);
+                                }
+                                m_MissingAssetSceneList[i].scene = EditorGUILayout.ObjectField(scene, scene.GetType(), true) as SceneAsset;
                             }
-                            m_MissingAssetSceneList[i].scene = EditorGUILayout.ObjectField(scene, scene.GetType(), true) as SceneAsset;
-                        }
-                        if (target.showDetail)
-                        {
-                            foreach (var missingReference in target.missingReferences)
+                            if (target.showDetail)
                             {
-                                GUILayout.Label(missingReference.path, UCL_GUIStyle.LabelStyle);
-                                //string path = GetGameObjectPath(obj);
-                                //EditorGUILayout.ObjectField(obj, obj.GetType(), true);
+                                foreach (var missingReference in target.missingReferences)
+                                {
+                                    GUILayout.Label(missingReference.path, UCL_GUIStyle.LabelStyle);
+                                    //string path = GetGameObjectPath(obj);
+                                    //EditorGUILayout.ObjectField(obj, obj.GetType(), true);
+                                }
                             }
                         }
+
+
+                        GUILayout.EndHorizontal();
                     }
-
-
-                    GUILayout.EndHorizontal();
                 }
             }
         }
