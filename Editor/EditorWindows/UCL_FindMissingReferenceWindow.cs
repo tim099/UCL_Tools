@@ -2,23 +2,46 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
+using UCL.Core;
 using UCL.Core.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-namespace UCL.Core
+namespace UCL.ToolsLib
 {
-    [System.Serializable]
-    public class ClearConfig
+    public enum SearchTarget
     {
-        public bool m_ClearMissingPrefab = true;
-        public bool m_ClearMissingComponent = true;
-        public bool m_ClearMissingField = true;
+        Scene,
+        Prefab,
+        ScriptableObject,
+    }
+
+
+    [System.Serializable]
+    public class SearchConfig
+    {
+        public SearchTarget searchTarget = SearchTarget.Scene;
+
+        public bool missingPrefab = true;
+        public bool missingComponent = true;
+        public bool missingField = true;
         /// <summary>
         /// Clear missing references in Prefab
         /// </summary>
-        public bool m_ClearMissingInPrefab = false;
+        public bool missingInPrefab = false;
+    }
+
+    [System.Serializable]
+    public class ClearConfig
+    {
+        public bool clearMissingPrefab = true;
+        public bool clearMissingComponent = true;
+        public bool clearMissingField = true;
+        /// <summary>
+        /// Clear missing references in Prefab
+        /// </summary>
+        public bool clearMissingInPrefab = false;
     }
 
 
@@ -50,9 +73,11 @@ namespace UCL.Core
     {
         private Vector2 scrollPosition = Vector2.zero;
         private Vector2 scrollPosition2 = Vector2.zero;
-        private List<MissingReferenceScene> m_MissingAssetSceneList = null;
-        private ClearConfig m_ClearConfig = new ClearConfig();
-        private UCL_ObjectDictionary m_Dic = new UCL_ObjectDictionary();
+        private List<MissingReferenceScene> missingAssetSceneList = null;
+
+        private SearchConfig searchConfig = new();
+        private ClearConfig clearConfig = new();
+        private UCL_ObjectDictionary m_Dic = new();
 
         [UnityEditor.MenuItem("UCL/Tools/FindMissingReferenceWindow")]
         public static void ShowWindow()
@@ -181,7 +206,6 @@ namespace UCL.Core
             }
             return isMissingReference;
         }
-
         private static void ClearMissingReference(SceneAsset target, ClearConfig config, bool restoreCurrentScene = true)
         {
             // 保存當前開啟的場景路徑
@@ -225,7 +249,7 @@ namespace UCL.Core
         {
             if (PrefabUtility.IsPrefabAssetMissing(target))//missing!!
             {
-                if (config.m_ClearMissingPrefab)
+                if (config.clearMissingPrefab)
                 {
                     //Debug.LogError($"ClearGameObjectMissingReference DestroyImmediate:{target.name}");
                     GameObject.DestroyImmediate(target);
@@ -236,12 +260,12 @@ namespace UCL.Core
             if (target == null)//理論上不會遇到 防呆
             {
                 Debug.LogError($"ClearGameObjectMissingReference target == null");
-                if (config.m_ClearMissingPrefab) GameObject.DestroyImmediate(target);
+                if (config.clearMissingPrefab) GameObject.DestroyImmediate(target);
                 return;
             }
             if (PrefabUtility.IsAnyPrefabInstanceRoot(target))//是Prefab 要特殊處理
             {
-                if (!config.m_ClearMissingInPrefab)//Dont clear missing references in Prefab
+                if (!config.clearMissingInPrefab)//Dont clear missing references in Prefab
                 {
                     return;
                 }
@@ -273,7 +297,7 @@ namespace UCL.Core
                 {
                     hasMissingComponents = true;
                 }
-                else if (config.m_ClearMissingField)
+                else if (config.clearMissingField)
                 {
                     if (ClearMissingReference(component, config))
                     {
@@ -281,7 +305,7 @@ namespace UCL.Core
                     }
                 }
             }
-            if (hasMissingComponents && config.m_ClearMissingComponent)//有missing Components
+            if (hasMissingComponents && config.clearMissingComponent)//有missing Components
             {
                 int removedCount = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(target);//目前暫時無效
                 dirty = true;
@@ -323,18 +347,22 @@ namespace UCL.Core
             }
             return false;
         }
+        private static IEnumerable<string> GetAllScenesPath()
+        {
+            string[] allAssets = AssetDatabase.GetAllAssetPaths();
+            return allAssets.Where(assetPath => assetPath.EndsWith(".unity", System.StringComparison.CurrentCultureIgnoreCase));
+        }
         private static async UniTask<List<MissingReferenceScene>> CheckMissingReference()
         {
-            List<MissingReferenceScene> missingAssetSceneList = new();
-            //m_MissingAssetSceneList.Clear();
-            string[] allAssets = AssetDatabase.GetAllAssetPaths();
-            var scenesPath = allAssets.Where(assetPath => assetPath.EndsWith(".unity"));
+            var scenesPath = GetAllScenesPath();
             int completedCount = 0;
             int totalCount = scenesPath.Count();
             // 保存當前開啟的場景路徑 改用OpenSceneMode.Additive 不需要還原
             var currentScene = EditorSceneManager.GetActiveScene();
             string currentScenePath = currentScene.path;
-            
+
+
+            List<MissingReferenceScene> missingAssetSceneList = new();
             try
             {
                 foreach (string assetPath in scenesPath)
@@ -408,38 +436,39 @@ namespace UCL.Core
         }
         private void WindowOnGUI()
         {
+            UCL_GUILayout.DrawObjectData(searchConfig, m_Dic.GetSubDic(nameof(searchConfig)), "Search Config");
             if (GUILayout.Button("Find Missing reference", UCL_GUIStyle.ButtonStyle))
             {
                 async UniTask Check()
                 {
-                    m_MissingAssetSceneList = await CheckMissingReference();
+                    missingAssetSceneList = await CheckMissingReference();
                 }
                 Check().Forget();
             }
 
-            if (!m_MissingAssetSceneList.IsNullOrEmpty())//顯示找到Missing Reference的場景
+            if (!missingAssetSceneList.IsNullOrEmpty())//顯示找到Missing Reference的場景
             {
                 if (GUILayout.Button("Clear All Missing Reference", UCL_GUIStyle.ButtonStyle))
                 {
                     //m_MissingAssetSceneList.Clear();
-                    for (int i = 0; i < m_MissingAssetSceneList.Count; i++)
+                    for (int i = 0; i < missingAssetSceneList.Count; i++)
                     {
                         // 保存當前開啟的場景路徑
                         string currentScenePath = EditorSceneManager.GetActiveScene().path;
-                        ClearMissingReference(m_MissingAssetSceneList[i].scene, m_ClearConfig, restoreCurrentScene: false);//restore after clear all!!
+                        ClearMissingReference(missingAssetSceneList[i].scene, clearConfig, restoreCurrentScene: false);//restore after clear all!!
                         EditorSceneManager.OpenScene(currentScenePath, OpenSceneMode.Single);
                     }
                 }
-                UCL_GUILayout.DrawObjectData(m_ClearConfig, m_Dic.GetSubDic(nameof(m_ClearConfig)), "Clear Config");
+                UCL_GUILayout.DrawObjectData(clearConfig, m_Dic.GetSubDic(nameof(clearConfig)), "Clear Config");
                 using (var scope = new GUILayout.ScrollViewScope(scrollPosition2))
                 {
                     scrollPosition2 = scope.scrollPosition;
 
                     
 
-                    for (int i = 0; i < m_MissingAssetSceneList.Count; i++)
+                    for (int i = 0; i < missingAssetSceneList.Count; i++)
                     {
-                        var target = m_MissingAssetSceneList[i];
+                        var target = missingAssetSceneList[i];
                         var scene = target.scene;
                         GUILayout.BeginHorizontal();
                         target.showDetail = UCL_GUILayout.Toggle(target.showDetail);
@@ -449,9 +478,9 @@ namespace UCL.Core
                             {
                                 if (GUILayout.Button($"Clear Missing Reference({target.missingReferences.Count})", UCL_GUIStyle.ButtonStyle, GUILayout.ExpandWidth(false)))//清除目標場景的Missing Reference
                                 {
-                                    ClearMissingReference(scene, m_ClearConfig);
+                                    ClearMissingReference(scene, clearConfig);
                                 }
-                                m_MissingAssetSceneList[i].scene = EditorGUILayout.ObjectField(scene, scene.GetType(), true) as SceneAsset;
+                                missingAssetSceneList[i].scene = EditorGUILayout.ObjectField(scene, scene.GetType(), true) as SceneAsset;
                             }
                             if (target.showDetail)
                             {
