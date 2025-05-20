@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using UCL.Core;
+using UCL.Core.JsonLib;
 using UCL.Core.UI;
 using UnityEditor;
 using UnityEngine;
@@ -19,11 +20,22 @@ namespace UCL.ToolsLib
             EditorWindow.GetWindow<UCL_GenerateClassWindow>("GenerateClassWindow");
         }
         private Vector2 scrollPosition = Vector2.zero;
-        private List<UCLI_Scope> m_Scopes = new();
         private UCL_ObjectDictionary m_Dic = new();
-        private string m_Result = "";
-        private string m_ExportFolder = "GeneratedScripts";
-        private string m_FileName = "Test.cs";
+        private bool m_Inited = false;
+        public class Config : UnityJsonSerializable
+        {
+            public UCL_ScriptDefinition m_ScriptDefinition = new();
+
+            public string m_Result = "";
+            public string m_ExportFolder = "GeneratedScripts";
+            public string m_FileName = "Test.cs";
+            public bool m_ExportToFile = true;
+        }
+        private Config m_Config = new Config();
+        //public UCL_GenerateClassWindow()
+        //{
+        //    LoadConfig();
+        //}
         private void OnGUI()
         {
             UCL_GUIStyle.IsInEditorWindow = true;
@@ -40,37 +52,77 @@ namespace UCL.ToolsLib
 
             UCL_GUIStyle.IsInEditorWindow = false;
         }
-
+        private void SaveConfig()
+        {
+            PlayerPrefs.SetString(nameof(UCL_GenerateClassWindow), m_Config.SerializeToJson().ToJson());
+        }
+        private void LoadConfig()
+        {
+            //Debug.LogError("LoadConfig");
+            string json = PlayerPrefs.GetString(nameof(UCL_GenerateClassWindow));
+            if (!string.IsNullOrEmpty(json))
+            {
+                m_Config.DeserializeFromJson(JsonData.ParseJson(json));
+            }
+        }
         private void WindowOnGUI()
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("ExportFolder", UCL_GUIStyle.LabelStyle, GUILayout.ExpandWidth(false));
-            m_ExportFolder = GUILayout.TextField(m_ExportFolder, UCL_GUIStyle.TextFieldStyle);
-            GUILayout.EndHorizontal();
+            if (!m_Inited)
+            {
+                LoadConfig();
+                m_Inited = true;
+            }
+
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label("FileName", UCL_GUIStyle.LabelStyle, GUILayout.ExpandWidth(false));
-            m_FileName = GUILayout.TextField(m_FileName, UCL_GUIStyle.TextFieldStyle);
+            if (GUILayout.Button("Save Config", UCL_GUIStyle.ButtonStyle))
+            {
+                SaveConfig();
+            }
+            if (GUILayout.Button("Load Config", UCL_GUIStyle.ButtonStyle))
+            {
+                LoadConfig();
+            }
             GUILayout.EndHorizontal();
 
-            UCL_GUILayout.DrawObjectData(m_Scopes, m_Dic, "Scopes");
+
+            GUILayout.BeginHorizontal();
+            m_Config.m_ExportToFile = UCL_GUILayout.CheckBox(m_Config.m_ExportToFile);
+            GUILayout.Label("Export To File", UCL_GUIStyle.LabelStyle, GUILayout.ExpandWidth(false));
+            GUILayout.EndHorizontal();
+            if (m_Config.m_ExportToFile)
+            {
+                GUILayout.BeginHorizontal();
+
+                GUILayout.Label("ExportFolder", UCL_GUIStyle.LabelStyle, GUILayout.ExpandWidth(false));
+                m_Config.m_ExportFolder = GUILayout.TextField(m_Config.m_ExportFolder, UCL_GUIStyle.TextFieldStyle);
+                GUILayout.EndHorizontal();
+
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("FileName", UCL_GUIStyle.LabelStyle, GUILayout.ExpandWidth(false));
+                m_Config.m_FileName = GUILayout.TextField(m_Config.m_FileName, UCL_GUIStyle.TextFieldStyle);
+                GUILayout.EndHorizontal();
+            }
+
+
+            UCL_GUILayout.DrawObjectData(m_Config.m_ScriptDefinition, m_Dic, "ScriptDefinition");
 
 
             if (GUILayout.Button("Test", UCL_GUIStyle.ButtonStyle))
             {
                 System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                foreach (var scope in m_Scopes)
+                m_Config.m_ScriptDefinition.FormScript(sb);
+                m_Config.m_Result = sb.ToString();
+                if (m_Config.m_ExportToFile)
                 {
-                    scope.FormScript(sb);
+                    string folder = Path.Combine(Application.dataPath, m_Config.m_ExportFolder);
+                    Directory.CreateDirectory(folder);
+                    string path = Path.Combine(folder, m_Config.m_FileName);
+                    File.WriteAllText(path, m_Config.m_Result);
                 }
-                m_Result = sb.ToString();
-                string folder = Path.Combine(Application.dataPath, m_ExportFolder);
-                Directory.CreateDirectory(folder);
-                string path = Path.Combine(folder, m_FileName);
-                File.WriteAllText(path, m_Result);
             }
             GUILayout.Space(UCL_GUIStyle.GetScaledSize(10f));
-            GUILayout.Label(m_Result, UCL_GUIStyle.LabelStyle);
+            GUILayout.Label(m_Config.m_Result, UCL_GUIStyle.LabelStyle);
         }
     }
 }

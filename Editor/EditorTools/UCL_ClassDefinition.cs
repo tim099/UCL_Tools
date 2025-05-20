@@ -16,6 +16,8 @@ namespace UCL.ToolsLib
         Public,
 
         Virtual,
+
+        Partial,
     }
     public interface UCLI_FormScript
     {
@@ -28,6 +30,27 @@ namespace UCL.ToolsLib
     public interface UCLI_ClassScope : UCLI_TypeListable, UCLI_FormScript
     {
 
+    }
+    public class UCL_ScriptDefinition : UCLI_FormScript
+    {
+        public List<string> m_Using = new List<string>();
+        public List<UCLI_Scope> m_Scopes = new();
+
+        public void FormScript(System.Text.StringBuilder sb, string indent = "")
+        {
+            if (!m_Using.IsNullOrEmpty())
+            {
+                foreach (var usingNameSpace in m_Using)
+                {
+                    sb.AppendLine(indent + $"using {usingNameSpace};");
+                }
+            }
+            sb.AppendLine();
+            foreach (var scope in m_Scopes)
+            {
+                scope.FormScript(sb, indent);
+            }
+        }
     }
     public class UCL_NameSpaceDefinition : UCLI_Scope
     {
@@ -54,6 +77,8 @@ namespace UCL.ToolsLib
 
         public List<TermType> m_Terms = new();
 
+        public List<string> m_Interfaces = new();
+
         public List<UCLI_ClassScope> m_Fields = new();
 
         public void NameOnGUI(UCL_ObjectDictionary iDic, string iDisplayName, UCL_GUILayout.DrawObjectParams iParams)
@@ -70,7 +95,16 @@ namespace UCL.ToolsLib
                 sb.Append(' ');
             }
             sb.Append("class ");
-            sb.AppendLine(m_Name);
+            sb.Append(m_Name);
+            if (!m_Interfaces.IsNullOrEmpty())
+            {
+                sb.Append($" : {m_Interfaces[0]}");
+                for (int i = 1; i < m_Interfaces.Count; i++)
+                {
+                    sb.Append($", {m_Interfaces[i]}");
+                }
+            }
+            sb.AppendLine();
 
             sb.AppendLine(indent + "{");
             foreach (var subClass in m_Fields)
